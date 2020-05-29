@@ -1,0 +1,26 @@
+# EditorConfig is awesome: https://EditorConfig.org
+# top-most EditorConfig file
+root = true
+
+[*]
+# 编码格式
+charset = utf-8
+# 缩进方式
+indent_style = space
+# 缩进大小
+indent_size = 4
+# Unix-style newlines with a newline ending every file
+end_of_line = lf
+# 是否让文件以空行结束
+insert_final_newline = true
+# 是否删除行尾空格
+trim_trailing_whitespace = true
+# [{*.sht,*.html,*.shtm,*.shtml,*.htm,*.ng}]
+# ij_html_do_not_indent_children_of_tags = html,body,thead,tbody,tfoot,script,template,style
+[*.md]
+# 是否删除行尾空格
+trim_trailing_whitespace = false
+# 是否让文件以空行结束
+insert_final_newline = false
+# WebStorm 配置必需的步骤 File--> Settings--> Editor-> Code Style--> HTML 中的 Other 选项卡 中的 Do not indent children of :
+# 点击文件夹图标。 然后再弹出中点击加号图标 依次输入 script,template,style.

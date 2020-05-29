@@ -1,0 +1,1146 @@
+<template>
+  <div class="manage-ctx">
+    <el-container class="manage-wrp is-vertical">
+      <!-- header -->
+      <com-header :user-info="userInfo"></com-header>
+      <!-- 页面主体 -->
+      <el-container class="manage-body">
+        <!-- 左侧菜单栏 -->
+        <com-aside @changeCp="changeCp" :menu-info="menuInfo" :class="[ isMobile ? 'float-aside' : '']"></com-aside>
+        <!-- 右侧内容主体 -->
+        <el-main v-loading="loadingShow" :class="['el-main-ctx fros-manage', objConfig.hasBread ? 'has-bread' : '', isLong ? 'more-top' : '']">
+          <!-- 主tab标签 -->
+          <div class="bar-wrp" @resize="resizeBar">
+            <div :class="['browser-tag-bar', 'clear', isLong ? 'mgr' : '']" @mousewheel="scrollTabBar" @DOMMouseScroll="scrollTabBar">
+              <ul :style="'width: ' + addLong">
+                <li v-for="(item, index) in curTabList" :cp-name="item.component" :nav-index="item.navIndex" :data-index="index" :key="index" :class="[index === curTabIndex ? 'cur' : '']" @click="changeCp(item)" @contextmenu.prevent="showContextMenu">
+                  <span>{{ item.title }}</span>
+                    <!--首页去掉关闭按钮-->
+                    <span v-show="index!=0" class="el-icon-close" @click.stop="deleteTab('close', index)"></span>
+                  <!--<span class="el-icon-close" @click.stop="deleteTab('close', index)"></span>-->
+                </li>
+              </ul>
+            </div>
+            <el-dropdown v-if="isLong">
+              <div class="more-page">
+                <span class="el-icon-arrow-down"></span>
+              </div>
+              <el-dropdown-menu slot="dropdown">
+                <template v-for="(item, index) in curTabList">
+                  <el-dropdown-item :key="index" @click.native="changeCp(item)">{{ item.title }}</el-dropdown-item>
+                </template>
+                <el-dropdown-item @click.native="deleteTab('all', 1)">关闭全部</el-dropdown-item>
+              </el-dropdown-menu>
+            </el-dropdown>
+          </div>
+          <!-- 页面面包屑 -->
+          <div class="bread-list clear" v-if="objConfig.hasBread">
+            <el-breadcrumb separator="/">
+              <el-breadcrumb-item v-for="(item, index) in breadList" :key="index" @click.native="breadcrumbToPath(item.title,item.path)">
+                  <span v-if="item.path != ''" style="color:#3877D6;">
+                      <span v-if="objConfig.isI18n">{{ $t(item.title) }}</span>
+                      <span v-else>{{ item.title }}</span>
+                  </span>
+                  <span v-else>
+                      <span v-if="objConfig.isI18n">{{ $t(item.title) }}</span>
+                      <span v-else>{{ item.title }}</span>
+                  </span>
+              </el-breadcrumb-item>
+            </el-breadcrumb>
+          </div>
+          <!-- 主tab标签右键功能 -->
+          <div ref="ctxMenu">
+            <div class="ctx-menu" :style="{marginTop: ctxMenuXY[1] + 'px', marginLeft: ctxMenuXY[0] + 'px',zIndex: 110}" v-if="curMenuShow">
+              <div class="ctx-menu-item" v-if="curMenuIndex!==0" @click="deleteTab('close', curMenuIndex)">关闭</div>
+              <div class="ctx-menu-item" @click="deleteTab('other', curMenuIndex)">关闭其他</div>
+              <div class="ctx-menu-item" v-if="curMenuIndex!==curTabList.length-1" @click="deleteTab('right', curMenuIndex)">关闭右侧</div>
+              <div class="ctx-menu-item" v-if="curMenuIndex!==0" @click="deleteTab('all', curMenuIndex)">关闭全部</div>
+              <div class="ctx-menu-item" v-if="curMenuIndex!==0" @click="singleRouter">独立页面</div>
+              <div class="ctx-menu-item" v-if="curMenuIndex!==0" @click="reloadCurPage">重新加载</div>
+            </div>
+          </div>
+          <!-- whh 注释，将独立页面和重新加载移到tab标签右键功能里 -->
+          <!-- 页面内容右键tab -->
+          <!--<div ref="ctxViewMenu">
+            <div class="ctx-menu" :style="'margin-top: ' + ctxViewMenuXY[1] + 'px; margin-left: ' + ctxViewMenuXY[0] + 'px'" v-if="curViewMenuShow">
+              <div class="ctx-menu-item" @click="singleRouter">独立页面</div>
+              <div class="ctx-menu-item" @click="reloadCurPage">重新加载</div>
+            </div>
+          </div>-->
+          <!-- 页面内容展示区 -->
+          <div class="frame-common-page" @contextmenu.prevent="showFrameCtx">
+            <keep-alive :include="cachePage.map(function(e){let o = e.split('/'); return o[o.length-1]}).toString()">
+              <!-- <component ref="active-cp" :params="curParams" :url-list="urlList" :is-long="isLong" :has-bread="objConfig.hasBread" :is="isExist ? thisComponent : notFound" :page-path="curTabCp"></component> -->
+              <router-view ref="active-cp" :params="curParams" :url-list="urlList" :is-long="isLong" :has-bread="objConfig.hasBread" :page-path="curTabCp"></router-view>
+            </keep-alive>
+          </div>
+        </el-main>
+      </el-container>
+    </el-container>
+  </div>
+</template>
+
+<script>
+import { mapGetters, mapMutations } from 'vuex'
+import utils from '@js/utils'
+import Bus from '@js/bus'
+import elmApi from '@js/api/elm/apiMethod'
+
+// 懒加载组件
+const ComHeader = () => import('../components/common/Header')
+const ComAside = () => import('../components/common/Aside')
+
+export default {
+    name: 'Manage',
+    data() {
+        return {
+            curTabList: [
+                {
+                    component: 'HomePage',
+                    title: '首页',
+                    navIndex: -1
+                }
+            ],
+            myBackToTopStyle: {
+                right: '50px',
+                bottom: '50px',
+                width: '40px',
+                height: '40px',
+                'border-radius': '4px',
+                'line-height': '45px', // 请保持与高度一致以垂直居中 Please keep consistent with height to center vertically
+                background: '#e7eaf1'// 按钮的背景颜色 The background color of the button
+            },
+            curTabIndex: 0,
+            curTabCp: 'HomePage',
+            curParams: {},
+            addLong: '',
+            isLong: false, // 是否超出顶部tab的长度
+            ctxMenuXY: [0, 0],
+            curMenuIndex: 0,
+            curMenuShow: false,
+            ctxViewMenuXY: [0, 0],
+            curViewMenuShow: false,
+            breadList: [],
+            urlList: [],
+            isExist: true
+        }
+    },
+    components: {
+        ComHeader,
+        ComAside
+    },
+    created: function () {
+        let self = this;
+        self.resizePage();
+        self.bindResize();
+        self.bindKeyUp();
+        self.init();
+        //
+        this.getElmCompany();
+        Bus.$on('_companyChange', (val)=> {
+            this.getElmCase();
+            Bus.$emit('companyChange', val);
+        });
+        Bus.$on('_caseChange', (val)=> {
+            Bus.$emit('caseChange', val);
+        });
+        //
+    },
+    mounted: function () {
+        let self = this
+        document.addEventListener('click', function (e) {
+            if (self.$refs.ctxMenu && self.$refs.ctxMenu.contains(e.target)) {
+                return true
+            } else if (self.$refs.ctxViewMenuXY && self.$refs.ctxViewMenuXY.contains(e.target)) {
+                return true
+            }
+            self.curMenuShow = false
+            self.curViewMenuShow = false
+        })
+    },
+    // asyncComputed: {
+    //   thisComponent: function () {
+    //     let self = this
+    //     let ActiveCp
+    //     let curCp = self.curTabList[self.curTabIndex]
+    //     // 获取菜单中允许访问的权限
+    //     let ableList = self.rightPathList
+    //     ableList = ableList.concat(self.objConfig.sysInfo.unCheckPath)
+    //     if (curCp.component) {
+    //       // 是否通过框架api创建
+    //       let isApiNew = self.curTabList[self.curTabIndex].props ? self.curTabList[self.curTabIndex].props.apiNew : false
+
+    //       // if (ableList.indexOf(self.curTabCp) >= -1 || isApiNew) { // 减少父页面跳转子页面，然后再点击菜单跳转子页面场景报404页面。
+    //       if (ableList.indexOf(self.curTabCp) !== -1 || isApiNew) {
+    //         if (curCp.isUrl) {
+    //           ActiveCp = WebView
+    //         } else {
+    //           let cpRoute
+    //           if (curCp.newComponentName) {
+    //             let cpNameList = self.curTabCp.split('/')
+    //             let cpName = curCp.newComponentName.slice(0, cpNameList[1].length - 6)
+    //             cpNameList[1] = cpName
+    //             cpRoute = cpNameList.join('/')
+    //           } else {
+    //             cpRoute = self.curTabCp
+    //           }
+    //           // console.log('./' + cpRoute)
+    //           ActiveCp = () => ({
+    //             component: import('./' + cpRoute).then(function (res) {
+    //               if (curCp.newComponentName) {
+    //                 res.default.name = curCp.newComponentName
+    //               }
+    //               return res.default
+    //             }).catch(function (e) {
+    //               self.isExist = false
+    //               self.$store.commit('setLoading', false)
+    //             }),
+    //             delay: 200,
+    //             timeout: 3000
+    //           })
+    //         }
+    //       } else {
+    //         ActiveCp = NotRoot
+    //       }
+    //     } else {
+    //       self.isExist = false
+    //       ActiveCp = NotFound
+    //     }
+    //     return ActiveCp
+    //   }
+    // },
+    computed: {
+        notFound: function () {
+            return NotFound
+        },
+        ...mapGetters([
+            'cachePage',
+            'loadingShow',
+            'userInfo',
+            'defaultIndex',
+            'menuInfo',
+            'objConfig',
+            'isMobile',
+            'rightPathList',
+            'elmCompanyKey',
+        ])
+    },
+
+    updated: function () {
+        let self = this
+        self.$nextTick(function () {
+            self.resizeBar()
+        })
+    },
+    methods: {
+
+        ...mapMutations(['setElmState']),
+
+        init: function () {
+            let self = this
+            // window.localStorage.removeItem('cacheTabList')    // TODO 用于不想缓存tab页签项目清空缓存。
+            let cacheTab = window.localStorage.getItem('cacheTabList')
+            let homeQuickList = window.localStorage.getItem('homeQuickList')
+            if (cacheTab) {
+                cacheTab = JSON.parse(cacheTab)
+                self.curTabList = cacheTab.cacheTabList
+                self.curTabIndex = cacheTab.cacheTabIndex
+                self.curTabCp = cacheTab.cacheCurTabCp
+                self.curParams = cacheTab.cacheCurParams
+                self.$store.commit('setDefaultIndex', cacheTab.defaultIndex)
+                // 将已经缓存的页面写入缓存列表
+                if (self.isUrl(self.curTabCp)) {
+                    self.$store.commit('setCachePage', 'WebView')
+                } else {
+                    self.$store.commit('setCachePage', self.curTabCp)
+                }
+            }
+            if (homeQuickList) {
+                homeQuickList = JSON.parse(homeQuickList)
+                // 将自定义的首页快捷方式获取并存储
+                self.$store.commit('updateHomeQuickList', homeQuickList)
+            }
+            if (self.curTabList[self.curTabIndex].breadList && self.curTabList[self.curTabIndex].breadList.length) {
+                self.breadList = self.curTabList[self.curTabIndex].breadList
+            } else {
+                self.breadList = self.getBreadList('-1')
+            }
+            // 监听close事件
+            Bus.$off('deleteTab').$on('deleteTab', function (res) {
+                if (['all', 'other', 'right', 'close'].indexOf(res.type) === -1) {
+                    self.$message.error('关闭标签参数错误')
+                    return false
+                } else {
+                    if (res.type === 'close') {
+                        // 依据target跳转
+                        self.deleteTab(res.type, res.idx, res.target)
+                    } else {
+                        // 直接关闭类型
+                        self.deleteTab(res.type, res.idx)
+                    }
+                }
+            })
+        },
+        changePage: function (cpInfo) {
+            let self = this
+            let curCp = self.curTabList[self.curTabIndex]
+            // 获取菜单中允许访问的权限
+            let ableList = self.rightPathList
+            ableList = ableList.concat(self.objConfig.sysInfo.unCheckPath)
+            if (curCp.component) {
+                // 是否通过框架api创建
+                let isApiNew = self.curTabList[self.curTabIndex].props ? self.curTabList[self.curTabIndex].props.apiNew : false
+
+                // if (ableList.indexOf(self.curTabCp) >= -1 || isApiNew) { // 减少父页面跳转子页面，然后再点击菜单跳转子页面场景报404页面。
+                if (ableList.indexOf(self.curTabCp) !== -1 || isApiNew) {
+                    if (curCp.isUrl) {
+                        self.$router.push('/webView', (to) => {
+                            if (!to.meta) to.meta = {}
+                            to.meta.navIndex = curCp.navIndex
+                        })
+                    } else {
+                        let cpRoute
+                        if (curCp.newComponentName) {
+                            let cpNameList = self.curTabCp.split('/')
+                            let cpName = curCp.newComponentName.slice(0, cpNameList[1].length - 6)
+                            cpNameList[1] = cpName
+                            cpRoute = cpNameList.join('/')
+                        } else {
+                            cpRoute = self.curTabCp
+                        }
+                        // console.log('./' + cpRoute)
+                        self.$router.push('/' + cpRoute, (to) => {
+                            if (!to.meta) to.meta = {}
+                            to.meta.navIndex = curCp.navIndex
+                            if (curCp.newComponentName) {
+                                self.$refs['active-cp'].$vnode.componentOptions.Ctor.options.name = curCp.newComponentName
+                            }
+                        }, (e) => {
+                            if (e) {
+                                self.isExist = false
+                                self.$router.replace('/notFound', (to) => {
+                                    if (!to.meta) to.meta = {}
+                                    to.meta.navIndex = curCp.navIndex
+                                })
+                            }
+                            self.$store.commit('setLoading', false)
+                        })
+                    }
+                } else {
+                    self.$router.push('/notRoot', (to) => {
+                        if (!to.meta) to.meta = {}
+                        to.meta.navIndex = curCp.navIndex
+                    })
+                }
+            } else {
+                self.isExist = false
+                self.$router.push('/notFound', (to) => {
+                    if (!to.meta) to.meta = {}
+                    to.meta.navIndex = curCp.navIndex
+                })
+            }
+        },
+        changeCp: function (cpInfo) {
+            // 组件修改触发内容
+            let self = this
+            if (!cpInfo.component) {
+                return false
+            }
+            // 默认存在组件
+            self.isExist = true
+            let curIndex = self.cpIsExist(cpInfo)
+            let isUrl = self.isUrl(cpInfo.component)
+            if (isUrl) {
+                cpInfo.isUrl = true
+                cpInfo.props = {
+                    ...Object.assign({}, cpInfo.props),
+                    webViewUrl: cpInfo.component
+                }
+            }
+            if (curIndex === -1 || curIndex === -2) {
+                if (!isUrl) {
+                    // 非url才加载loading
+                    self.$store.commit('setLoading', true)
+                } else {
+                    // 是url的话把url保存起来
+                    self.urlList.push(cpInfo.component)
+                }
+                let breadList = self.getBreadList(cpInfo.navIndex)
+                cpInfo.breadList = breadList
+                let cpNameList = cpInfo.component.split('/')
+                let cpName = cpNameList[1]
+                let navIndexList = cpInfo.navIndex.split('@gap@')
+                if (curIndex === -2) {
+                    cpInfo.newComponentName = cpName + self.randomCharacter()
+                    cpNameList[1] = cpInfo.newComponentName
+                    cpInfo.component = cpNameList.join('/')
+                    navIndexList[0] = cpInfo.component
+                    cpInfo.navIndex = navIndexList.join('@gap@')
+                }
+                self.curTabList.push(cpInfo)
+                self.curTabIndex = self.curTabList.length - 1
+            } else {
+                self.curTabIndex = curIndex
+            }
+            // 修改对应边侧栏的栏目
+            if (cpInfo.props) {
+                // 将已有的栏目写入localStorge
+                window.localStorage.setItem('cacheTabList', JSON.stringify({
+                    cacheTabList: self.curTabList,
+                    cacheTabIndex: self.curTabIndex,
+                    cacheCurTabCp: cpInfo.component,
+                    cacheCurParams: cpInfo.props,
+                    defaultIndex: self.defaultIndex
+                }))
+                self.curParams = cpInfo.props
+                self.curTabList[self.curTabIndex].props = cpInfo.props
+                self.$store.commit('setDefaultIndex', cpInfo.navIndex.toString() + '@longgap@' + JSON.stringify(cpInfo.props))
+            } else {
+                // 将已有的栏目写入localStorge
+                window.localStorage.setItem('cacheTabList', JSON.stringify({
+                    cacheTabList: self.curTabList,
+                    cacheTabIndex: self.curTabIndex,
+                    cacheCurTabCp: cpInfo.component,
+                    cacheCurParams: self.curParams,
+                    defaultIndex: self.defaultIndex
+                }))
+                self.curParams = self.curTabList[self.curTabIndex].props
+                self.$store.commit('setDefaultIndex', cpInfo.navIndex.toString())
+            }
+            self.curTabCp = self.curTabList[self.curTabIndex].component
+            self.$nextTick(function () {
+                self.resizeBar()
+                // 将已经缓存的页面写入缓存列表
+                if (self.isUrl(self.curTabCp)) {
+                    self.$store.commit('setCachePage', 'WebView')
+                } else {
+                    self.$store.commit('setCachePage', self.curTabCp)
+                }
+                curIndex = self.cpIsExist(cpInfo)
+                // 假如出现滚动条定位
+                let allLi = document.querySelectorAll('.browser-tag-bar ul li')
+                let tagBar = document.querySelector('.browser-tag-bar')
+                let fedWidth = 0
+                for (let i = 0; i < allLi.length; i++) {
+                    if (i < curIndex) {
+                        fedWidth = fedWidth + allLi[i].offsetWidth
+                    }
+                }
+                self.$nextTick(function () {
+                    tagBar.scrollLeft = fedWidth
+                    if (self.curTabList[self.curTabIndex].breadList && self.curTabList[self.curTabIndex].breadList.length) {
+                        self.breadList = self.curTabList[self.curTabIndex].breadList
+                    } else {
+                        self.breadList = self.getBreadList('-1')
+                    }
+                })
+            })
+            // 移动端状态下关闭菜单
+            self.closeMobileCollapse()
+            self.changePage()
+        },
+        closeMobileCollapse: function () {
+            let self = this
+            if (self.isMobile) {
+                Bus.$emit('collapseChange', {
+                    forCp: 'aside',
+                    value: true
+                })
+                Bus.$emit('collapseChange', {
+                    forCp: 'header',
+                    value: true
+                })
+            }
+        },
+        cpIsExist: function (cpInfo) {
+            let self = this
+            let hadDiffParams = false
+            let isUrl = self.isUrl(cpInfo.component)
+            for (let i = 0; i < self.curTabList.length; i++) {
+                let item = self.curTabList[i]
+                // if (item.component === cpInfo.component) {
+                if (item.resourceNo === cpInfo.resourceNo) {
+                    // 无参数组件或者webview组件无须进行参数校验
+                    if (JSON.stringify(item.props) === JSON.stringify(cpInfo.props) || isUrl) {
+                        return i
+                    } else {
+                        // 组件相同，参数不同，为组件修改name以保证缓存效果
+                        hadDiffParams = true
+                    }
+                }
+            }
+            if (hadDiffParams) {
+                return -2
+            } else {
+                return -1
+            }
+        },
+        isUrl: function (cpName) {
+            // 判断component是否是一个url，如果是url则当成是一个新的tab页
+            let urlReg = /^((http:\/\/)|(https:\/\/))/g
+            if (urlReg.test(cpName)) {
+                return true
+            } else {
+                return false
+            }
+        },
+        resizeBar: function () {
+            // todo temp
+            return;
+            let self = this
+            // 获取当前所以tab的宽度，看看有没有超长
+            let allLong = document.querySelector('.bar-wrp').clientWidth
+            let addLong = 0
+            document.querySelectorAll('.browser-tag-bar ul li').forEach(function (item, index) {
+                addLong = addLong + (item.clientWidth + 2)
+            })
+            if (addLong > allLong) {
+                self.isLong = true
+            } else {
+                self.isLong = false
+            }
+            self.addLong = addLong + 'px'
+        },
+        resizePage: function () {
+            // todo temp
+            return;
+            // 适配移动端管理界面
+            let self = this
+            self.$nextTick(function () {
+                // 获取设备宽度
+                let deviceWidth = window.innerWidth
+                let isMobile
+                if (deviceWidth < 1024) {
+                    isMobile = true
+                    // 操作html标签，增加一个el-mobile的属性
+                    document.querySelector('html').setAttribute('class', 'el-mobile')
+                } else {
+                    isMobile = false
+                    document.querySelector('html').setAttribute('class', '')
+                }
+                self.$store.commit('setIsMobile', isMobile)
+            })
+        },
+        bindResize: function () {
+            let self = this
+            window.onresize = function () {
+                self.resizeBar()
+                self.resizePage()
+                Bus.$emit('windowResize')
+            }
+        },
+        bindKeyUp: function () {
+            window.onkeyup = function (e) {
+                e.preventDefault()
+                Bus.$emit('windowKeyup', e)
+            }
+        },
+        deleteTab: function (type, curIndex, targetIndex) {
+            let self = this
+            if (curIndex === undefined) {
+                // 如果curIndex没有值的话，默认当前选中tab
+                curIndex = self.curTabIndex
+            }
+            let newNavIndex
+            if ((self.curTabList.length > 1 && curIndex !== 0) || (curIndex === 0 && type !== 'close')) {
+                if (self.curParams && self.curParams.checkSave) {
+                    self.$confirm(self.$t('manage.confirm.tipCtx'), self.$t('manage.confirm.tipTitle'), {
+                        confirmButtonText: self.$t('manage.confirm.confirmBtn')
+                    }).then(() => {
+                        let curTabCp
+                        let newList = []
+                        let deleteUrlList = []
+                        // 获取剩余展示的标签
+                        switch (type) {
+                            case 'close':
+                                self.curTabList.forEach(function (item, index) {
+                                    if (curIndex !== index) {
+                                        newList.push(item)
+                                    } else {
+                                        curTabCp = item.component
+                                        if (self.isUrl(item.component)) {
+                                            deleteUrlList.push(item.component)
+                                        }
+                                    }
+                                })
+                                break
+                            case 'other':
+                                self.curTabList.forEach(function (item, index) {
+                                    if (curIndex === index || index === 0) {
+                                        newList.push(item)
+                                    } else {
+                                        curTabCp = item.component
+                                        if (self.isUrl(item.component)) {
+                                            deleteUrlList.push(item.component)
+                                        }
+                                    }
+                                })
+                                break
+                            case 'right':
+                                self.curTabList.forEach(function (item, index) {
+                                    if (index <= curIndex || index === 0) {
+                                        newList.push(item)
+                                    } else {
+                                        curTabCp = item.component
+                                        if (self.isUrl(item.component)) {
+                                            deleteUrlList.push(item.component)
+                                        }
+                                    }
+                                })
+                                break
+                            case 'all':
+                                self.curTabList.forEach(function (item, index) {
+                                    if (index === 0) {
+                                        newList.push(item)
+                                    } else {
+                                        curTabCp = item.component
+                                        if (self.isUrl(item.component)) {
+                                            deleteUrlList.push(item.component)
+                                        }
+                                    }
+                                })
+                                break
+                        }
+                        self.cleanUrlPage(deleteUrlList)
+                        self.curTabList = newList
+                        // 判断当前应该展示哪一页
+                        switch (type) {
+                            case 'close':
+                                let targetType = typeof targetIndex
+                                if (targetType === 'string') {
+                                    // 根据路由跳转
+                                    let hadEqul = false
+                                    for (let i = 0; i < self.curTabList.length; i++) {
+                                        let tabItem = self.curTabList[i]
+                                        if (tabItem.component === targetIndex) {
+                                            self.curTabIndex = i
+                                            self.curTabCp = self.curTabList[self.curTabIndex].component
+                                            newNavIndex = self.curTabList[self.curTabIndex].navIndex.toString()
+                                            if (self.curTabList[self.curTabIndex].props) {
+                                                newNavIndex = newNavIndex + '@longgap@' + JSON.stringify(self.curTabList[self.curTabIndex].props)
+                                            }
+                                            self.$store.commit('setDefaultIndex', newNavIndex)
+                                            hadEqul = true
+                                            break
+                                        }
+                                    }
+                                    if (!hadEqul) {
+                                        self.curTabIndex = self.curTabIndex - 1
+                                    }
+                                } else if (targetType === 'number') {
+                                    // 根据index跳转
+                                    if (!isNaN(targetIndex * 1) && targetIndex < self.curTabList.length) {
+                                        self.curTabIndex = targetIndex
+                                        self.curTabCp = self.curTabList[self.curTabIndex].component
+                                        newNavIndex = self.curTabList[self.curTabIndex].navIndex.toString()
+                                        if (self.curTabList[self.curTabIndex].props) {
+                                            newNavIndex = newNavIndex + '@longgap@' + JSON.stringify(self.curTabList[self.curTabIndex].props)
+                                        }
+                                        self.$store.commit('setDefaultIndex', newNavIndex)
+                                    } else {
+                                        self.curTabIndex = self.curTabIndex - 1
+                                    }
+                                } else {
+                                    if (self.curTabIndex === curIndex) {
+                                        self.curTabIndex = curIndex - 1
+                                        self.curTabCp = self.curTabList[self.curTabIndex].component
+                                        newNavIndex = self.curTabList[self.curTabIndex].navIndex.toString()
+                                        if (self.curTabList[self.curTabIndex].props) {
+                                            newNavIndex = newNavIndex + '@longgap@' + JSON.stringify(self.curTabList[self.curTabIndex].props)
+                                        }
+                                        self.$store.commit('setDefaultIndex', newNavIndex)
+                                    } else if (self.curTabIndex > curIndex) {
+                                        self.curTabIndex = self.curTabIndex - 1
+                                    }
+                                }
+                                break
+                            case 'other':
+                                if (curIndex === 0) {
+                                    self.curTabIndex = 0
+                                } else {
+                                    self.curTabIndex = 1
+                                }
+                                self.curTabCp = self.curTabList[self.curTabIndex].component
+                                newNavIndex = self.curTabList[self.curTabIndex].navIndex.toString()
+                                if (self.curTabList[self.curTabIndex].props) {
+                                    newNavIndex = newNavIndex + '@longgap@' + JSON.stringify(self.curTabList[self.curTabIndex].props)
+                                }
+                                self.$store.commit('setDefaultIndex', newNavIndex)
+                                break
+                            case 'right':
+                                if (self.curTabIndex > curIndex) {
+                                    self.curTabIndex = self.curTabList.length - 1
+                                    self.curTabCp = self.curTabList[self.curTabIndex].component
+                                    newNavIndex = self.curTabList[self.curTabIndex].navIndex.toString()
+                                    if (self.curTabList[self.curTabIndex].props) {
+                                        newNavIndex = newNavIndex + '@longgap@' + JSON.stringify(self.curTabList[self.curTabIndex].props)
+                                    }
+                                    self.$store.commit('setDefaultIndex', newNavIndex)
+                                }
+                                break
+                            case 'all':
+                                self.curTabIndex = 0
+                                self.curTabCp = self.curTabList[self.curTabIndex].component
+                                newNavIndex = self.curTabList[self.curTabIndex].navIndex.toString()
+                                if (self.curTabList[self.curTabIndex].props) {
+                                    newNavIndex = newNavIndex + '@longgap@' + JSON.stringify(self.curTabList[self.curTabIndex].props)
+                                }
+                                self.$store.commit('setDefaultIndex', newNavIndex)
+                                break
+                        }
+                        // 清空webview缓存
+                        if (self.isUrl(curTabCp) && self.urlList.length === 0) {
+                            self.$store.commit('moveCachePage', 'WebView')
+                        } else {
+                            self.$store.commit('moveCachePage', curTabCp)
+                        }
+                        self.curMenuShow = false
+                        // 将已有的栏目写入localStorge
+                        window.localStorage.setItem('cacheTabList', JSON.stringify({
+                            cacheTabList: self.curTabList,
+                            cacheTabIndex: self.curTabIndex,
+                            cacheCurTabCp: self.curTabCp,
+                            defaultIndex: self.defaultIndex
+                        }))
+                        self.$nextTick(function () {
+                            self.resizeBar()
+                        })
+                        self.breadList = self.curTabIndex === 0 ? [self.objConfig.sysInfo.name, '首页'] : self.curTabList[self.curTabIndex].breadList
+                    })
+                } else {
+                    let curTabCp
+                    let newList = []
+                    let deleteUrlList = []
+                    switch (type) {
+                        case 'close':
+                            self.curTabList.forEach(function (item, index) {
+                                if (curIndex !== index) {
+                                    newList.push(item)
+                                } else {
+                                    curTabCp = item.component
+                                    if (self.isUrl(item.component)) {
+                                        deleteUrlList.push(item.component)
+                                    }
+                                }
+                            })
+                            break
+                        case 'other':
+                            self.curTabList.forEach(function (item, index) {
+                                if (curIndex === index || index === 0) {
+                                    newList.push(item)
+                                } else {
+                                    curTabCp = item.component
+                                    if (self.isUrl(item.component)) {
+                                        deleteUrlList.push(item.component)
+                                    }
+                                }
+                            })
+                            break
+                        case 'right':
+                            self.curTabList.forEach(function (item, index) {
+                                if (index <= curIndex || index === 0) {
+                                    newList.push(item)
+                                } else {
+                                    curTabCp = item.component
+                                    if (self.isUrl(item.component)) {
+                                        deleteUrlList.push(item.component)
+                                    }
+                                }
+                            })
+                            break
+                        case 'all':
+                            self.curTabList.forEach(function (item, index) {
+                                if (index === 0) {
+                                    newList.push(item)
+                                } else {
+                                    curTabCp = item.component
+                                    if (self.isUrl(item.component)) {
+                                        deleteUrlList.push(item.component)
+                                    }
+                                }
+                            })
+                            break
+                    }
+                    self.cleanUrlPage(deleteUrlList)
+                    self.curTabList = newList
+                    switch (type) {
+                        case 'close':
+                            let targetType = typeof targetIndex
+                            if (targetType === 'string') {
+                                // 根据路由跳转
+                                let hadEqul = false
+                                for (let i = 0; i < self.curTabList.length; i++) {
+                                    let tabItem = self.curTabList[i]
+                                    if (tabItem.component === targetIndex) {
+                                        self.curTabIndex = i
+                                        self.curTabCp = self.curTabList[self.curTabIndex].component
+                                        newNavIndex = self.curTabList[self.curTabIndex].navIndex.toString()
+                                        if (self.curTabList[self.curTabIndex].props) {
+                                            newNavIndex = newNavIndex + '@longgap@' + JSON.stringify(self.curTabList[self.curTabIndex].props)
+                                        }
+                                        self.$store.commit('setDefaultIndex', newNavIndex)
+                                        hadEqul = true
+                                        break
+                                    }
+                                }
+                                if (!hadEqul) {
+                                    self.curTabIndex = self.curTabIndex - 1
+                                }
+                            } else if (targetType === 'number') {
+                                // 根据index跳转
+                                if (!isNaN(targetIndex * 1) && targetIndex < self.curTabList.length) {
+                                    self.curTabIndex = targetIndex
+                                    self.curTabCp = self.curTabList[self.curTabIndex].component
+                                    newNavIndex = self.curTabList[self.curTabIndex].navIndex.toString()
+                                    if (self.curTabList[self.curTabIndex].props) {
+                                        newNavIndex = newNavIndex + '@longgap@' + JSON.stringify(self.curTabList[self.curTabIndex].props)
+                                    }
+                                    self.$store.commit('setDefaultIndex', newNavIndex)
+                                } else {
+                                    self.curTabIndex = self.curTabIndex - 1
+                                }
+                            } else {
+                                if (self.curTabIndex === curIndex) {
+                                    self.curTabIndex = curIndex - 1
+                                    self.curTabCp = self.curTabList[self.curTabIndex].component
+                                    newNavIndex = self.curTabList[self.curTabIndex].navIndex.toString()
+                                    if (self.curTabList[self.curTabIndex].props) {
+                                        newNavIndex = newNavIndex + '@longgap@' + JSON.stringify(self.curTabList[self.curTabIndex].props)
+                                    }
+                                    self.$store.commit('setDefaultIndex', newNavIndex)
+                                } else if (self.curTabIndex > curIndex) {
+                                    self.curTabIndex = self.curTabIndex - 1
+                                }
+                            }
+                            break
+                        case 'other':
+                            if (curIndex === 0) {
+                                self.curTabIndex = 0
+                            } else {
+                                self.curTabIndex = 1
+                            }
+                            self.curTabCp = self.curTabList[self.curTabIndex].component
+                            newNavIndex = self.curTabList[self.curTabIndex].navIndex.toString()
+                            if (self.curTabList[self.curTabIndex].props) {
+                                newNavIndex = newNavIndex + '@longgap@' + JSON.stringify(self.curTabList[self.curTabIndex].props)
+                            }
+                            self.$store.commit('setDefaultIndex', newNavIndex)
+                            break
+                        case 'right':
+                            if (self.curTabIndex > curIndex) {
+                                self.curTabIndex = self.curTabList.length - 1
+                                self.curTabCp = self.curTabList[self.curTabIndex].component
+                                newNavIndex = self.curTabList[self.curTabIndex].navIndex.toString()
+                                if (self.curTabList[self.curTabIndex].props) {
+                                    newNavIndex = newNavIndex + '@longgap@' + JSON.stringify(self.curTabList[self.curTabIndex].props)
+                                }
+                                self.$store.commit('setDefaultIndex', newNavIndex)
+                            }
+                            break
+                        case 'all':
+                            self.curTabIndex = 0
+                            self.curTabCp = self.curTabList[self.curTabIndex].component
+                            newNavIndex = self.curTabList[self.curTabIndex].navIndex.toString()
+                            if (self.curTabList[self.curTabIndex].props) {
+                                newNavIndex = newNavIndex + '@longgap@' + JSON.stringify(self.curTabList[self.curTabIndex].props)
+                            }
+                            self.$store.commit('setDefaultIndex', newNavIndex)
+                            break
+                    }
+                    // 清空webview缓存
+                    if (self.isUrl(curTabCp) && self.urlList.length === 0) {
+                        self.$store.commit('moveCachePage', 'WebView')
+                    } else {
+                        self.$store.commit('moveCachePage', curTabCp)
+                    }
+                    self.curMenuShow = false
+                    // 将已有的栏目写入localStorge
+                    window.localStorage.setItem('cacheTabList', JSON.stringify({
+                        cacheTabList: self.curTabList,
+                        cacheTabIndex: self.curTabIndex,
+                        cacheCurTabCp: self.curTabCp,
+                        defaultIndex: self.defaultIndex
+                    }))
+                    self.$nextTick(function () {
+                        self.resizeBar()
+                    })
+                    self.breadList = self.curTabIndex === 0 ? [self.objConfig.sysInfo.name, '首页'] : self.curTabList[self.curTabIndex].breadList
+                }
+            } else {
+                self.$alert(self.$t('manage.alert.tipCtx'), self.$t('manage.alert.tipTitle'), {
+                    confirmButtonText: self.$t('manage.alert.confirmBtn')
+                })
+                self.curMenuShow = false
+            }
+        },
+        scrollTabBar: function (e) {
+            // 标签栏滚动事件
+            e.stopPropagation()
+            e.preventDefault()
+            let browser = utils.getDeviceInfo('browser')
+            let udflag
+            switch (browser) {
+                case 'Chrome':
+                    if (e.deltaY > 0) {
+                        udflag = true
+                    } else {
+                        udflag = false
+                    }
+                    break
+                case 'Firefox':
+                    if (e.detail > 0) {
+                        udflag = true
+                    } else {
+                        udflag = false
+                    }
+                    break
+                default:
+                    if (e.deltaY > 0) {
+                        udflag = true
+                    } else {
+                        udflag = false
+                    }
+            }
+            let curScrollLeft
+            let curTarget
+            if (e.currentTarget.getAttribute('class') === 'bar-wrp') {
+                curTarget = e.currentTarget.getElementsByClassName('browser-tag-bar')[0]
+                curScrollLeft = curTarget.scrollLeft
+            } else {
+                curTarget = e.currentTarget
+                curScrollLeft = e.currentTarget.scrollLeft
+            }
+            if (!udflag) {
+                if (curScrollLeft > 0) {
+                    curTarget.scrollLeft = curScrollLeft - 10
+                }
+            } else {
+                curTarget.scrollLeft = curScrollLeft + 10
+            }
+        },
+        showContextMenu: function (e) {
+            let curTarget
+            let self = this
+            if (e.currentTarget.getAttribute('class') === 'bar-wrp') {
+                curTarget = e.currentTarget.getElementsByClassName('browser-tag-bar')[0]
+            } else {
+                curTarget = e.currentTarget
+            }
+            let curIndex = parseInt(curTarget.getAttribute('data-index'))
+            // 获取侧边栏的宽度
+            let asideWidth = document.querySelector('.b-aside').clientWidth
+            self.ctxMenuXY = [e.clientX - asideWidth, e.offsetY]
+            self.curMenuIndex = curIndex
+            self.curMenuShow = true
+        },
+        getBreadList: function (navIndex) {
+            // 获取面包屑列表
+            let self = this
+            let breadList = []
+            breadList.push({title: self.objConfig.sysInfo.name, path: ''})
+            if (navIndex === '-1' || navIndex === '') {
+                breadList.push({title: '首页', path: ''})
+                return breadList
+            } else if (navIndex.indexOf('@') !== -1) {
+                breadList = JSON.parse(JSON.stringify(self.breadList))
+                if (self.uniqueArray(breadList, navIndex.split('@gap@')[1])) {
+                    breadList.push({
+                        title: navIndex.split('@gap@')[1].split('@longgap')[0],
+                        path: navIndex.split('@gap@')[0]
+                    })
+                }
+                // breadList.push({title: navIndex.split('@gap@')[1].split('@longgap')[0],path: navIndex.split('@gap@')[0]})
+            } else {
+                let baseIndex = parseInt(localStorage.getItem('childSysIndex') || self.objConfig.sysInfo.defaultModule)
+                breadList.push({title: self.menuInfo.menuList[baseIndex].resourceName, path: ''})
+                let getBreadIndexList = navIndex.split('-')
+                getBreadIndexList = getBreadIndexList.splice(1, getBreadIndexList.length - 1)
+                let temVal
+                getBreadIndexList.forEach(function (item, index) {
+                    let curIndex = parseInt(item)
+                    switch (index) {
+                        case 0:
+                            temVal = self.menuInfo.menuList[baseIndex].children[curIndex - 1]
+                            break
+                        case 1:
+                            temVal = temVal.children[curIndex - 1]
+                            break
+                        case 2:
+                            temVal = temVal.children[curIndex - 1]
+                            break
+                        case 3:
+                            temVal = temVal.children[curIndex - 1]
+                    }
+                    if (temVal.resourceName) {
+                        breadList.push({title: temVal.resourceName, path: temVal.url}) // 菜单切换最后一层级需要绑定url，以供newpage时使用
+                    }
+                })
+            }
+            return breadList
+        },
+        cleanUrlPage: function (url) {
+            let self = this
+            let newUrlList = []
+            self.urlList.forEach(function (item, index) {
+                if (url.indexOf(item) === -1) {
+                    newUrlList.push(item)
+                }
+            })
+            self.urlList = newUrlList
+        },
+        randomCharacter: function () {
+            let tpl = 'xxxxxx'
+            let newList = []
+            let characterList = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S',
+                'T', 'U', 'V', 'W', 'X', 'Y', 'Z']
+            for (let i = 0; i < tpl.length; i++) {
+                let rdnChar = characterList[parseInt(Math.random() * characterList.length)]
+                newList.push(i === 0 ? rdnChar : rdnChar.toLowerCase())
+            }
+            return newList.join('')
+        },
+        showFrameCtx: function (e) {
+            console.log(e.currentTarget)
+            // 内容右键
+            let self = this
+            // 获取侧边栏的宽度
+            let asideWidth = document.querySelector('.b-aside').clientWidth
+            // 获取兄弟组件的高度
+            let barHeight = document.querySelector('.bar-wrp').clientHeight
+            let breadHeight = 0
+            if (self.objConfig.hasBread) {
+                breadHeight = document.querySelector('.bread-list').clientHeight
+            }
+            self.ctxViewMenuXY = [e.clientX - asideWidth, e.clientY - barHeight - breadHeight]
+            self.curViewMenuShow = true
+        },
+        reloadCurPage: function () {
+            let self = this
+            Object.assign(self.$refs['active-cp'].$data, self.$refs['active-cp'].$options.data.call(this))
+            // TODO whh 关闭右键菜单
+            self.curMenuShow = false
+        },
+        singleRouter: function () {
+            let self = this
+            let curCp = self.$refs['active-cp']
+            let routesList = localStorage.getItem('asyncRoute')
+            try {
+                routesList = JSON.parse(routesList)
+                if (!Array.isArray(routesList)) {
+                    routesList = []
+                }
+            } catch (e) {
+                routesList = []
+            }
+            let hadCp = false
+            let cpIndex
+            for (let i = 0; i < routesList.length; i++) {
+                let item = routesList[i]
+                if (item.name === curCp.$options.name) {
+                    hadCp = true
+                    cpIndex = i
+                    break
+                }
+            }
+            if (!hadCp) {
+                routesList.push({
+                    path: `/${curCp.$options.name}`.toLowerCase(),
+                    name: curCp.$options.name,
+                    componentPath: self.curTabCp,
+                    props: curCp.$options.propsData,
+                    component: () => import(`./${self.curTabCp}`)
+                })
+            } else {
+                routesList[cpIndex].props = curCp.$options.propsData
+            }
+            // 持久化router
+            localStorage.setItem('asyncRoute', JSON.stringify(routesList))
+            // 新跳转界面
+            window.open(`/manage/${curCp.$options.name}`.toLowerCase())
+            // TODO whh 关闭右键菜单
+            self.curMenuShow = false
+        },
+        breadcrumbToPath: function (title, path) {
+            let self = this
+            let changeCpObj = self.getChangeCpObj(self.curTabList, title)
+            if (changeCpObj != null) {
+                self.changeCp(changeCpObj)
+            } else {
+                self.$newpage({
+                    path: path,
+                    title: title
+                })
+            }
+        },
+        uniqueArray: function (arr, title) {
+            for (let i = 0; i < arr.length; i++) {
+                if (arr[i].title == title) {
+                    return false
+                }
+            }
+            return true
+        },
+        getChangeCpObj: function (arr, title) {
+            for (let i = 0; i < arr.length; i++) {
+                if (arr[i].title == title) {
+                    return arr[i]
+                }
+            }
+            return null
+        },
+        //
+        // for Elm
+        getElmCompany() {
+            elmApi.getCompany({
+                data: {},
+                success: res=> {
+                    this.setElmState({
+                        k: 'elmCompanyList',
+                        v: res.data.data.dataList,
+                    });
+                }
+            })
+        },
+        getElmCase() {
+            const com = window.localStorage.getItem(this.elmCompanyKey)||'';
+            elmApi.getCase({
+                headers: {
+                    'tenant-id': com,
+                },
+                success: res=> {
+                    this.setElmState({
+                        k: 'elmCaseList',
+                        v: res.data.data.dataList,
+                    });
+                }
+            })
+        },
+        //
+    },
+    watch: {
+        '$route': {
+            handler(val) {
+                if (val.meta.navIndex) {
+                    let idx = this.curTabList.findIndex(i => i.navIndex === val.meta.navIndex)
+                    if (idx >= 0) {
+                        this.curTabIndex = idx
+                        if (this.curTabList[this.curTabIndex].breadList && this.curTabList[this.curTabIndex].breadList.length) {
+                            this.breadList = this.curTabList[this.curTabIndex].breadList
+                        } else {
+                            this.breadList = this.getBreadList('-1')
+                        }
+                    }
+                } else {
+                    this.curTabIndex = 0
+                    this.breadList = this.getBreadList('-1')
+                }
+            }
+        }
+    }
+}
+</script>
+
+<style lang="scss">
+  @import "../../../assets/scss/manage/manage.scss";
+  @import "../../../assets/scss/manage/elm.scss";
+</style>

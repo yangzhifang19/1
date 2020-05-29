@@ -1,0 +1,49 @@
+
+const companyList = {
+    code: 200,
+    message: 'success',
+    data: {
+        'dataList|3': [
+            {
+                key: '@cword(5,10)公司',
+                value: '@id',
+            }
+        ],
+        selectCodeValues: {},
+        pagingInfo: {
+            pageSize: 5,
+            currentPage: 1,
+            totalRows: 3,
+            currentRow: 0,
+            pageLastRow: 5,
+            totalPages: 1
+        }
+    }
+};
+
+const caseList = {
+    code: 200,
+    message: 'success',
+    data: {
+        'dataList|5': [
+            {
+                key: '@cword(5,10)展会',
+                value: '@id',
+            }
+        ],
+        selectCodeValues: {},
+        pagingInfo: {
+            pageSize: 5,
+            currentPage: 1,
+            totalRows: 3,
+            currentRow: 0,
+            pageLastRow: 5,
+            totalPages: 1
+        }
+    }
+};
+
+export default {
+    companyList,
+    caseList
+}

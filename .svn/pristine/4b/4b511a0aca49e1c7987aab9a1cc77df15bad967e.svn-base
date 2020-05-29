@@ -1,0 +1,15 @@
+# Third party
+**/node_modules
+node_modules
+
+# Not written by hand
+src/components/el-expand/src/utils/popper.js
+# Build products
+build/
+dist/
+frosui/
+
+.eslintrc.js
+babel.config.js
+vue.config.js
+postcss.config.js

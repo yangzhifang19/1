@@ -1,0 +1,44 @@
+
+import api from './apiUrl'
+import utils from '../../utils'
+
+export default {
+
+    // for system
+    getCompany: req=> {
+        req.method = 'post';
+        // req.headers = {Authorization: utils.getCookie('token')}
+        // req.headers = {"auc_app_key": "f6e8cdd4-9984-11e9-aa09-005056802619", "auc_system_code": "01301"}
+        let queryUrl = api.getCompany;
+        utils.sendReq({
+            queryUrl: queryUrl,
+            req: req,
+        })
+    },
+
+    getCase: req=> {
+        req.method = 'post';
+        // req.headers = {Authorization: utils.getCookie('token')}
+        // req.headers = {"auc_app_key": "f6e8cdd4-9984-11e9-aa09-005056802619", "auc_system_code": "01301"}
+        let queryUrl = api.getCase;
+        utils.sendReq({
+            queryUrl: queryUrl,
+            req: req,
+        })
+    },
+
+    // for components
+    getHall: req=> {
+        req.method = 'post';
+        // req.headers = {Authorization: utils.getCookie('token')}
+        // req.headers = {"auc_app_key": "f6e8cdd4-9984-11e9-aa09-005056802619", "auc_system_code": "01301"}
+        let queryUrl = api.getHall;
+        utils.sendReq({
+            queryUrl: queryUrl,
+            req: req,
+        })
+    },
+
+    // for modules
+    // todo...
+}

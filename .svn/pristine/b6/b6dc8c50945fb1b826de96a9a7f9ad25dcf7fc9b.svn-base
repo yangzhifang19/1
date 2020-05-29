@@ -1,0 +1,19 @@
+<template>
+    <div style="padding: 20px;">
+        <h1>demo page.</h1>
+    </div>
+</template>
+
+<script>
+
+    import Base from '@js/base';
+
+    export default {
+        name: "DemoPage",
+        extends: Base,
+    }
+</script>
+
+<style scoped>
+
+</style>

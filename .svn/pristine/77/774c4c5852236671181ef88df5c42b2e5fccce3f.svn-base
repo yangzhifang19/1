@@ -1,0 +1,24 @@
+
+export default {
+  state: {
+      elmCompanyList: [],
+      elmCaseList: [],
+  },
+  mutations: {
+      setElmCompanyList(state, data) {
+          state.elmCompanyList = data;
+      },
+      setElmCaseList(state, data) {
+          state.elmCaseList = data;
+      },
+  },
+  getters: {
+      elmCompanyList: state => {
+          return state.elmCompanyList;
+      },
+      elmCaseList: state => {
+          return state.elmCaseList;
+      },
+  },
+  actions: {},
+}

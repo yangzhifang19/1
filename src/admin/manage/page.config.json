@@ -1,0 +1,11 @@
+{
+    "title": "Fros-UI管理界面",
+    "externals": {
+        "polyfill": {
+            "type": "js",
+            "url": [
+                "/static/js/fros.polyfill.js"
+            ]
+        }
+    }
+}

@@ -1,0 +1,30 @@
+<template>
+    <div style="padding: 20px;">
+        <h1>demo page.</h1>
+    </div>
+</template>
+
+<script>
+
+    import Base from '@js/base';
+    import Bus from '@js/bus';
+
+    export default {
+        name: "DemoPage",
+        extends: Base,
+        created() {
+
+            Bus.$off('companyChange').$on('companyChange', res=> {
+                this.$message.info('公司：' + res);
+            });
+            Bus.$off('caseChange').$on('caseChange', res=> {
+                this.$message.info('展会：' + res);
+            });
+
+        },
+    }
+</script>
+
+<style scoped>
+
+</style>

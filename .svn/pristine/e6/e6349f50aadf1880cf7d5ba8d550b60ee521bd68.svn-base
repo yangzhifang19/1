@@ -1,0 +1,340 @@
+<template>
+    <el-header height="70px">
+        <el-row type="flex" class="row-bg">
+
+            <div :class="['left-part', isMobile ? 'no-left' : '']">
+                <template v-if="!isMobile">
+                    <div class="header-logo"></div>
+                    <div class="system-name">{{objConfig.sysInfo.name}}</div>
+                    <!-- 拼接一级菜单whh -->
+                    <ul v-if="menuInfo.menuList.length>1" class="child-app">
+                        <li v-for="(item, index) in menuInfo.menuList"
+                            :key="index"
+                            :class="['mobile-module', childSysCurIndex === index ? 'cur' : '']"
+                            @click="changeChildSysIndex(index)"
+                        >
+                            <span v-if="objConfig.isI18n">{{ $t(item.resourceName) }}</span>
+                            <span v-else>{{ item.resourceName }}</span>
+                        </li>
+                    </ul>
+                </template>
+                <template v-else>
+                    <div class="hamburger-item" @click="changeCollapse">
+                        <span
+                            :class="['iconfont', isCollapse ? 'fros-icon-HAMBURGERMENU rotate' : 'fros-icon-HAMBURGERMENU']"></span>
+                    </div>
+                    <el-dropdown>
+                        <div class="sys-module">
+                            <span class="iconfont fros-icon-yingyongchengxu-xianxing"></span>
+                        </div>
+                        <el-dropdown-menu slot="dropdown">
+                            <!-- 生成菜单whh -->
+                            <el-dropdown-item v-for="(item, index) in menuInfo.menuList"
+                                              :key="index"
+                                              :class="[childSysCurIndex === index ? 'cur' : '']"
+                                              @click.native="changeChildSysIndex(index)">
+                                <span v-if="objConfig.isI18n">{{ $t(item.resourceName) }}</span>
+                                <span v-else>{{ item.resourceName }}</span>
+                            </el-dropdown-item>
+                        </el-dropdown-menu>
+                    </el-dropdown>
+                </template>
+            </div>
+
+            <div class="right-part">
+
+                <el-form class="head-selector" :inline="true">
+                    <el-form-item label="当前项目：">
+                        <fros-select v-model="elmCompany" placeholder="当前公司" :options="elmCompanyList" :frosDefValue="defaultCompany"></fros-select>
+                    </el-form-item>
+                    <el-form-item>
+                        <fros-select v-model="elmCase" placeholder="当前展会" :options="elmCaseList" :frosDefValue="defaultCase"></fros-select>
+                    </el-form-item>
+                </el-form>
+
+                <div class="head-item msg-tip el-dropdown">
+                    <div class="btn-fullscreen" @click="handleFullScreen">
+                        <el-tooltip effect="dark" :content="fullscreen ? `取消全屏`:`全屏`" placement="bottom">
+                            <span class="iconfont iconquanping1" style="font-size: 18px"></span>
+                        </el-tooltip>
+                    </div>
+                </div>
+                <div v-if="false" class="lang-change el-dropdown" :title="$t('manage.header.changeLang')">
+                    <el-dropdown>
+                        <!--<span class="iconfont iconzhongwen" style="font-size: 20px"></span>-->
+                        <div :class="['iconfont', 'fros-icon-language']">
+                            <span class="lang-text">{{ langIconDict[curLang].name }}</span>
+                        </div>
+                        <el-dropdown-menu slot="dropdown">
+                            <el-dropdown-item :class="[curLang === index ? 'cur' : '']"
+                                              v-for="(item, index) in langIconDict" :lang-name="index"
+                                              @click.native="changeLang" :key="index">{{ item.text }}
+                            </el-dropdown-item>
+                        </el-dropdown-menu>
+                    </el-dropdown>
+                </div>
+                <template v-if="newMsgList.length">
+                    <el-dropdown>
+                        <div class="el-dropdown-link">
+                            <div class="head-item msg-tip">
+                                <el-badge :value="newMsgList.length" class="item" :max="5">
+                                    <span class="iconfont iconxiaoxi" style="font-size: 16px"></span>
+                                    <!-- <span class="iconfont fros-icon-xin-xianxing"></span>-->
+                                </el-badge>
+                            </div>
+                        </div>
+                        <el-dropdown-menu slot="dropdown">
+                            <div :class="['msg-item', index === newMsgList.length -1 ? 'no-bd' : '']"
+                                 v-for="(item, index) in newMsgList" :key="index">
+                                <a :href="item.url">
+                                    <div class="msg-item-title">{{ item.msg }}</div>
+                                    <div class="msg-item-time">{{ item.time }}</div>
+                                </a>
+                            </div>
+                            <div class="view-more">
+                                <a href="">查看更多</a>
+                            </div>
+                        </el-dropdown-menu>
+                    </el-dropdown>
+                </template>
+                <template v-else>
+                    <el-dropdown>
+                        <div class="el-dropdown-link">
+                            <div class="head-item msg-tip">
+                                <span class="iconfont iconxiaoxi" style="font-size: 18px"></span>
+                                <!--<span class="iconfont fros-icon-xin-xianxing"></span>-->
+                            </div>
+                        </div>
+                        <el-dropdown-menu slot="dropdown">
+                            <div :class="['msg-item', 'no-bd']">
+                                <a>
+                                    <div class="msg-item-title">暂无更多消息</div>
+                                    <div class="msg-item-time">-</div>
+                                </a>
+                            </div>
+                            <div class="view-more">
+                                <a href="javascript:;">查看全部</a>
+                            </div>
+                        </el-dropdown-menu>
+                    </el-dropdown>
+                </template>
+                <el-dropdown>
+                    <div class="el-dropdown-link">
+                        <div class="user-avatar head-item">
+                            <img :src="userInfo.avatar" alt="">
+                        </div>
+                    </div>
+                    <el-dropdown-menu slot="dropdown">
+                        <el-dropdown-item disabled>当前用户组：{{ userInfo.rootName }}</el-dropdown-item>
+                        <!--<el-dropdown-item @click.native="toLog">前端日志</el-dropdown-item>-->
+                        <!--<el-dropdown-item @click.native="toSetting">个性化设置</el-dropdown-item>-->
+                        <el-dropdown-item divided></el-dropdown-item>
+                        <el-dropdown-item @click.native="toLogout">退出登录</el-dropdown-item>
+                    </el-dropdown-menu>
+                </el-dropdown>
+
+            </div>
+
+        </el-row>
+    </el-header>
+</template>
+
+<script>
+import { mapGetters } from 'vuex'
+import utils from '@/assets/js/utils'
+import Bus from '@js/bus'
+import i18n from '@/assets/js/lang'
+
+export default {
+    name: 'Header',
+    props: {
+        userInfo: {
+            type: Object
+        }
+    },
+    data() {
+        return {
+            langIconDict: i18n.options.messages,
+            isCollapse: true,
+            newMsgList: [],
+            childSysCurIndex: null,
+            fullscreen: false,
+            //
+            elmCompany: '',
+            elmCase: '',
+        }
+    },
+    computed: {
+        ...mapGetters([
+            'curLang',
+            'childSysIndex',
+            'defaultIndex',
+            'menuInfo',
+            'objConfig',
+            'isMobile',
+            'elmCompanyKey',
+            'elmCaseKey',
+            'elmCompanyList',
+            'elmCaseList',
+        ]),
+        //
+        defaultCompany() {
+            const list = this.elmCompanyList;
+            const data = window.localStorage.getItem(this.elmCompanyKey) || '';
+            return list.some(n=> n.value==data)? data:(list[0]? list[0].value:'');
+        },
+        defaultCase() {
+            const list = this.elmCaseList;
+            const data = window.localStorage.getItem(this.elmCaseKey) || '';
+            return list.some(n=> n.value==data)? data:(list[0]? list[0].value:'');
+        },
+    },
+    created: function () {
+        let self = this
+        self.getCurChildSys()
+        Bus.$on('collapseChange', function (res) {
+            if (res.forCp === 'header') {
+                self.isCollapse = res.value
+            }
+        });
+        //
+    },
+    methods: {
+        handleFullScreen: function () {
+            let element = document.documentElement;
+            if (this.fullscreen) {
+                if (document.exitFullscreen) {
+                    document.exitFullscreen();
+                } else if (document.webkitCancelFullScreen) {
+                    document.webkitCancelFullScreen();
+                } else if (document.mozCancelFullScreen) {
+                    document.mozCancelFullScreen();
+                } else if (document.msExitFullscreen) {
+                    document.msExitFullscreen();
+                }
+            } else {
+                if (element.requestFullscreen) {
+                    element.requestFullscreen();
+                } else if (element.webkitRequestFullScreen) {
+                    element.webkitRequestFullScreen();
+                } else if (element.mozRequestFullScreen) {
+                    element.mozRequestFullScreen();
+                } else if (element.msRequestFullscreen) {
+                    // IE11
+                    element.msRequestFullscreen();
+                }
+            }
+            this.fullscreen = !this.fullscreen;
+        },
+        changeLang: function (e) {
+            let self = this
+            let lang = e.currentTarget.getAttribute('lang-name')
+            localStorage.setItem('lang', lang)
+            self.$i18n.locale = lang
+            self.$store.commit('setAppLang', lang)
+        },
+        getCurChildSys: function () {
+            // 获取子系统模块信息
+            let self = this
+            // 从localStorge中获取
+            let childSysIndex = parseInt(localStorage.getItem('childSysIndex') || self.objConfig.sysInfo.defaultModule)
+            self.childSysCurIndex = childSysIndex
+            self.$store.commit('changeChildSysIndex', childSysIndex)
+        },
+        changeChildSysIndex: function (index) {
+            // 切换子系统模块
+            let self = this
+            if (index !== self.childSysCurIndex) {
+                self.childSysCurIndex = index
+                // 清空所有模块
+                // self.$store.commit('cleanCachePage')
+                // self.$store.commit('cleanDefaultIndex')
+                self.$store.commit('changeChildSysIndex', index)
+                localStorage.setItem('childSysIndex', index)
+                self.$nextTick(function () {
+                    self.$nextTick(function () {
+                        // 左侧导航栏颜色
+                        let hadCurItem = document.querySelector('.el-menu-vertical li[nav-index].is-active')
+                        if (hadCurItem) {
+                            hadCurItem.setAttribute('class', hadCurItem.getAttribute('class').replace(/ is-active/g, ''))
+                            hadCurItem.style.color = '#ffffff'
+                        }
+                        // 当前选中项
+                        let curItem = document.querySelector('.el-menu-vertical li[nav-index="' + self.defaultIndex + '"]')
+                        if (curItem) {
+                            curItem.setAttribute('class', curItem.getAttribute('class') + ' is-active')
+                        }
+                    })
+                })
+            }
+        },
+        toSetting: function () {
+            // 跳转到个性化设置
+            let self = this
+            self.$newpage({
+                title: '个性化设置',
+                path: 'setting/Setting'
+            })
+        },
+        toLogout: function () {
+            // 退出登录
+            utils.deleteCookie('oauthToken', {
+                path: '/'
+            })
+            // 保留首页快捷方式
+            let homeQuickList = localStorage.getItem('homeQuickList')
+            localStorage.clear()
+            localStorage.setItem('homeQuickList', homeQuickList)
+        },
+        toLog: function () {
+            // 调整到日志页
+            let self = this
+            self.$newpage({
+                title: '前端日志',
+                path: 'logline/Logline',
+                params: {
+                    checkSave: true
+                }
+            })
+        },
+        changeCollapse() {
+            let self = this
+            self.isCollapse = !self.isCollapse
+            Bus.$emit('collapseChange', {
+                forCp: 'aside',
+                value: self.isCollapse
+            })
+        },
+        //
+    },
+    watch: {
+        elmCompany(val) {
+            window.localStorage.setItem(this.elmCompanyKey, val);
+            //
+            Bus.$emit('_companyChange', val);
+        },
+        elmCase(val) {
+            window.localStorage.setItem(this.elmCaseKey, val);
+            //
+            Bus.$emit('_caseChange', val);
+        },
+    }
+}
+</script>
+
+<style scoped>
+
+    .manage-wrp .msg-tip .iconfont {
+        font-size: 24px;
+        color: #757676;
+    }
+
+    .manage-wrp .msg-tip:hover {
+        /*// background:#3877D6;*/
+    }
+
+    .manage-wrp .msg-tip:hover .iconfont {
+        font-size: 24px;
+        color: #424242;
+    }
+</style>

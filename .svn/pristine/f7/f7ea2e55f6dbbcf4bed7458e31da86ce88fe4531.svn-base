@@ -1,0 +1,30 @@
+
+.elm-selector {
+
+    .el-dialog__title .mode { color: #a6d5ff; }
+    .el-dialog__body { padding: 20px 20px 0; }
+    .el-dialog__footer { padding-right: 20px; }
+
+    .filter { margin-bottom: 20px; }
+    .filter .el-card__body { padding-bottom: 2px; }
+
+    .p_l { flex-grow: 1; }
+    .p_r { width: 190px; margin-left: 20px; }
+
+    .pagebox { margin-top: 10px; }
+
+    .selected {
+        overflow-y: auto;
+
+        .el-tag { display: block; position: relative; margin-left: 0; margin-bottom: 5px; }
+        .el-tag__close { position: absolute; right: 10px; top: 8px; }
+    }
+
+    .buttons { padding: 0 25px; }
+    .status { float: left; }
+
+    .el-table__body .cell div { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    // fix Fros.
+    .single .el-table__header .el-table-column--selection .cell { display: none; }
+
+}
