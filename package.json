@@ -43,7 +43,7 @@
     "highlight.js": "^9.15.6",
     "js-cookie": "^2.2.0",
     "logline": "^1.1.2",
-    "markdown-it": "^8.4.2",
+    "markdown-it": "^12.3.2",
     "markdown-it-emoji": "^1.4.0",
     "mavon-editor": "^2.7.4",
     "mockjs": "^1.0.1-beta3",
